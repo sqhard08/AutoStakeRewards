@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Пароль от кошелька
+PASSWORD="1"
+
+# Путь к лог-файлу
+LOG_FILE="/root/delegate.log"
+
+# Минимальный остаток на балансе
+MIN_BALANCE=2000000
+
+# Комиссия за транзакцию
+TX_FEE=5000
+
+# Функция для записи в лог
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Функция для выполнения команды с передачей пароля
+execute_command() {
+    local command=$1
+    log "Выполняем команду: $command"
+    output=$(echo $PASSWORD | $command)
+    log "Результат: $output"
+}
+
+# Получение адреса кошелька
+wallet_address=$(echo $PASSWORD | empowerd keys show wallet1 -a)
+log "Адрес кошелька: $wallet_address"
+
+# Адрес валидатора
+validator_address="empowervaloper1zayu3xf087rk5cca952jkenz8rz4rr9ea030fw"
+
+# Снять вознаграждения комиссии
+log "Снимаем вознаграждения комиссии..."
+execute_command "empowerd tx distribution withdraw-rewards $validator_address --from wallet1 --commission --chain-id empowerchain-1 --fees ${TX_FEE}umpwr -y"
+sleep 55
+
+# Снять все вознаграждения
+log "Снимаем все вознаграждения..."
+execute_command "empowerd tx distribution withdraw-all-rewards --from wallet1 --chain-id empowerchain-1 --fees ${TX_FEE}umpwr -y"
+sleep 55
+
+# Проверить баланс
+log "Проверяем баланс..."
+balance_output=$(echo $PASSWORD | empowerd q bank balances $wallet_address --output json)
+balance=$(echo $balance_output | jq -r '.balances[] | select(.denom=="umpwr") | .amount')
+log "Баланс: $balance umpwr"
+sleep 55
+
+# Проверка и делегирование
+required_balance=$((MIN_BALANCE + TX_FEE))
+if (( balance > required_balance )); then
+    amount_to_delegate=$((balance - required_balance))
+    log "Баланс больше $required_balance. Делегируем ${amount_to_delegate} umpwr..."
+    execute_command "empowerd tx staking delegate $validator_address ${amount_to_delegate}umpwr --from wallet1 --chain-id empowerchain-1 --fees ${TX_FEE}umpwr -y"
+else
+    log "Недостаточно средств для делегирования. Текущий баланс: $balance umpwr. Требуется минимум: $required_balance umpwr"
+fi
