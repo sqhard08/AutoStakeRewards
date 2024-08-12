@@ -1,4 +1,4 @@
-3#!/bin/bash
+4#!/bin/bash
 
 # Пароль от кошелька
 PASSWORD="1"
